@@ -1,1 +1,54 @@
+index.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sentiment AI Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <header>
+    <h1>🧠 Sentiment AI Dashboard</h1>
+    <p>Analyze emotions from text and emojis instantly</p>
+  </header>
 
+  <main>
+    <section class="input-section">
+      <textarea id="userInput" placeholder="Type your text here..."></textarea>
+      <div class="buttons">
+        <button id="analyzeBtn">Analyze Sentiment</button>
+        <button id="clearBtn" class="clear">Clear</button>
+      </div>
+      <p id="resultBox"></p>
+    </section>
+
+    <section class="stats-section">
+      <div class="summary-box positive">
+        <h3>😊 Positive</h3>
+        <p id="positiveCount">0</p>
+      </div>
+      <div class="summary-box neutral">
+        <h3>😐 Neutral</h3>
+        <p id="neutralCount">0</p>
+      </div>
+      <div class="summary-box negative">
+        <h3>😢 Negative</h3>
+        <p id="negativeCount">0</p>
+      </div>
+    </section>
+
+    <section class="chart-section">
+      <canvas id="sentimentChart" width="350" height="350"></canvas>
+    </section>
+  </main>
+
+  <footer>
+    <p>Built with ❤️ by <strong>Malehu Johanna Segoapa</strong></p>
+    <a href="https://sentiment-ai-1682327a.base44.app" target="_blank">Live Demo</a>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
