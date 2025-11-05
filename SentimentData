@@ -1,0 +1,56 @@
+{
+  "name": "SentimentData",
+  "type": "object",
+  "properties": {
+    "text": {
+      "type": "string",
+      "description": "The text that was analyzed"
+    },
+    "model": {
+      "type": "string",
+      "enum": [
+        "Hugging Face BERT",
+        "VaderSentiment",
+        "AWS Comprehend"
+      ],
+      "description": "The model used for analysis"
+    },
+    "sentiment": {
+      "type": "string",
+      "enum": [
+        "Positive",
+        "Neutral",
+        "Negative"
+      ],
+      "description": "The detected sentiment"
+    },
+    "score": {
+      "type": "number",
+      "description": "Confidence score"
+    },
+    "manual_sentiment": {
+      "type": "string",
+      "enum": [
+        "Positive",
+        "Neutral",
+        "Negative"
+      ],
+      "description": "Manually labeled sentiment"
+    },
+    "selected": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this record is selected"
+    },
+    "image_url": {
+      "type": "string",
+      "description": "URL of uploaded image if applicable"
+    }
+  },
+  "required": [
+    "text",
+    "model",
+    "sentiment",
+    "score"
+  ]
+}
