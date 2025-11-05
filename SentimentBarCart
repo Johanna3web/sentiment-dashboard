@@ -1,0 +1,33 @@
+import React from "react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Cell } from "recharts";
+
+const COLORS = {
+  Positive: "#00C853",
+  Neutral: "#FFD600",
+  Negative: "#D50000"
+};
+
+export default function SentimentBarChart({ data }) {
+  const chartData = [
+    { name: "Positive", count: data.positive || 0, fill: COLORS.Positive },
+    { name: "Neutral", count: data.neutral || 0, fill: COLORS.Neutral },
+    { name: "Negative", count: data.negative || 0, fill: COLORS.Negative }
+  ];
+
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={chartData}>
+        <CartesianGrid strokeDasharray="3 3" />
+        <XAxis dataKey="name" />
+        <YAxis />
+        <Tooltip />
+        <Legend />
+        <Bar dataKey="count" fill="#00897B" radius={[8, 8, 0, 0]}>
+          {chartData.map((entry, index) => (
+            <Cell key={`cell-${index}`} fill={entry.fill} />
+          ))}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
