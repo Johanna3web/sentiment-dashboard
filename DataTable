@@ -1,0 +1,256 @@
+import React, { useState } from "react";
+import { base44 } from "@/api/base44Client";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
+import { Trash2, Download, Filter, Search } from "lucide-react";
+import { format } from "date-fns";
+
+export default function DataTable() {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [showMisclassified, setShowMisclassified] = useState(false);
+  const queryClient = useQueryClient();
+
+  const { data: records = [] } = useQuery({
+    queryKey: ["sentimentData"],
+    queryFn: () => base44.entities.SentimentData.list("-created_date"),
+    initialData: []
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }) => base44.entities.SentimentData.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sentimentData"] });
+    }
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (ids) => {
+      return Promise.all(ids.map(id => base44.entities.SentimentData.delete(id)));
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sentimentData"] });
+    }
+  });
+
+  const filteredRecords = records.filter(record => {
+    const matchesSearch = record.text.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesMisclassified = !showMisclassified || 
+      (record.manual_sentiment && record.sentiment !== record.manual_sentiment);
+    return matchesSearch && matchesMisclassified;
+  });
+
+  const selectedRecords = records.filter(r => r.selected);
+
+  const handleSelectAll = (checked) => {
+    filteredRecords.forEach(record => {
+      updateMutation.mutate({ id: record.id, data: { selected: checked } });
+    });
+  };
+
+  const handleSelect = (id, checked) => {
+    updateMutation.mutate({ id, data: { selected: checked } });
+  };
+
+  const handleManualLabel = (id, sentiment) => {
+    updateMutation.mutate({ id, data: { manual_sentiment: sentiment } });
+  };
+
+  const handleDeleteSelected = () => {
+    if (window.confirm(`Delete ${selectedRecords.length} selected records?`)) {
+      deleteMutation.mutate(selectedRecords.map(r => r.id));
+    }
+  };
+
+  const handleDeleteAll = () => {
+    if (window.confirm(`Delete ALL ${records.length} records? This cannot be undone.`)) {
+      deleteMutation.mutate(records.map(r => r.id));
+    }
+  };
+
+  const handleDownloadCSV = () => {
+    const headers = ["Text", "Sentiment", "Model", "Score", "Timestamp", "Manual Label"];
+    const rows = records.map(r => [
+      r.text,
+      r.sentiment,
+      r.model,
+      r.score,
+      format(new Date(r.created_date), "yyyy-MM-dd HH:mm:ss"),
+      r.manual_sentiment || ""
+    ]);
+
+    const csv = [headers, ...rows].map(row => 
+      row.map(cell => `"${cell}"`).join(",")
+    ).join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "sentiment_records.csv";
+    a.click();
+  };
+
+  const getSentimentColor = (sentiment) => {
+    const colors = {
+      Positive: "bg-green-100 text-green-800 border-green-200",
+      Neutral: "bg-yellow-100 text-yellow-800 border-yellow-200",
+      Negative: "bg-red-100 text-red-800 border-red-200"
+    };
+    return colors[sentiment] || "bg-gray-100 text-gray-800";
+  };
+
+  return (
+    <div className="p-6 lg:p-8 space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900">Data Table</h1>
+        <p className="text-gray-500 mt-1">View and manage all sentiment analysis records</p>
+      </div>
+
+      {/* Actions */}
+      <Card className="bg-white shadow-md">
+        <CardContent className="pt-6">
+          <div className="flex flex-col lg:flex-row gap-4">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Input
+                placeholder="Search text..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant={showMisclassified ? "default" : "outline"}
+                onClick={() => setShowMisclassified(!showMisclassified)}
+                className={showMisclassified ? "bg-[#00897B]" : ""}
+              >
+                <Filter className="w-4 h-4 mr-2" />
+                Misclassified Only
+              </Button>
+              <Button variant="outline" onClick={handleDownloadCSV}>
+                <Download className="w-4 h-4 mr-2" />
+                Download CSV
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={handleDeleteSelected}
+                disabled={selectedRecords.length === 0}
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete Selected ({selectedRecords.length})
+              </Button>
+              <Button variant="destructive" onClick={handleDeleteAll}>
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete All
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Table */}
+      <Card className="bg-white shadow-md">
+        <CardHeader>
+          <CardTitle>Records ({filteredRecords.length})</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-12">
+                    <Checkbox
+                      checked={selectedRecords.length === filteredRecords.length && filteredRecords.length > 0}
+                      onCheckedChange={handleSelectAll}
+                    />
+                  </TableHead>
+                  <TableHead>Text</TableHead>
+                  <TableHead>Sentiment</TableHead>
+                  <TableHead>Model</TableHead>
+                  <TableHead>Score</TableHead>
+                  <TableHead>Timestamp</TableHead>
+                  <TableHead>Manual Label</TableHead>
+                  <TableHead>Image</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredRecords.map(record => (
+                  <TableRow 
+                    key={record.id}
+                    className={record.manual_sentiment && record.sentiment !== record.manual_sentiment ? "bg-red-50" : ""}
+                  >
+                    <TableCell>
+                      <Checkbox
+                        checked={record.selected || false}
+                        onCheckedChange={(checked) => handleSelect(record.id, checked)}
+                      />
+                    </TableCell>
+                    <TableCell className="max-w-xs truncate">{record.text}</TableCell>
+                    <TableCell>
+                      <Badge className={getSentimentColor(record.sentiment)}>
+                        {record.sentiment}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-sm">{record.model}</TableCell>
+                    <TableCell>{(record.score * 100).toFixed(1)}%</TableCell>
+                    <TableCell className="text-sm">
+                      {format(new Date(record.created_date), "MMM dd, HH:mm")}
+                    </TableCell>
+                    <TableCell>
+                      <Select
+                        value={record.manual_sentiment || "none"}
+                        onValueChange={(value) => 
+                          handleManualLabel(record.id, value === "none" ? null : value)
+                        }
+                      >
+                        <SelectTrigger className="w-32">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">None</SelectItem>
+                          <SelectItem value="Positive">Positive</SelectItem>
+                          <SelectItem value="Neutral">Neutral</SelectItem>
+                          <SelectItem value="Negative">Negative</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </TableCell>
+                    <TableCell>
+                      {record.image_url && (
+                        <img 
+                          src={record.image_url} 
+                          alt="Thumbnail" 
+                          className="w-12 h-12 object-cover rounded"
+                        />
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          if (window.confirm("Delete this record?")) {
+                            deleteMutation.mutate([record.id]);
+                          }
+                        }}
+                      >
+                        <Trash2 className="w-4 h-4 text-red-500" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
