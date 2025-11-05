@@ -1,0 +1,128 @@
+import React, { useState } from "react";
+import { base44 } from "@/api/base44Client";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Loader2, Send } from "lucide-react";
+import FeedbackCard from "../components/dashboard/FeedbackCard";
+import { AnimatePresence } from "framer-motion";
+
+export default function AnalyzeText() {
+  const [text, setText] = useState("");
+  const [model, setModel] = useState("Hugging Face BERT");
+  const [result, setResult] = useState(null);
+  const queryClient = useQueryClient();
+
+  const analyzeMutation = useMutation({
+    mutationFn: async ({ text, model }) => {
+      const prompt = `Analyze the sentiment of the following text (including any emojis). Return ONLY a JSON object with "sentiment" (Positive, Neutral, or Negative) and "score" (confidence 0-1).
+
+Text: "${text}"
+
+Model simulation: ${model}`;
+
+      const response = await base44.integrations.Core.InvokeLLM({
+        prompt,
+        response_json_schema: {
+          type: "object",
+          properties: {
+            sentiment: { type: "string", enum: ["Positive", "Neutral", "Negative"] },
+            score: { type: "number" }
+          }
+        }
+      });
+
+      const record = await base44.entities.SentimentData.create({
+        text,
+        model,
+        sentiment: response.sentiment,
+        score: response.score
+      });
+
+      return { ...response, text, model };
+    },
+    onSuccess: (data) => {
+      setResult(data);
+      queryClient.invalidateQueries({ queryKey: ["sentimentData"] });
+      setText("");
+    }
+  });
+
+  const handleAnalyze = () => {
+    if (!text.trim()) return;
+    setResult(null);
+    analyzeMutation.mutate({ text, model });
+  };
+
+  return (
+    <div className="p-6 lg:p-8 space-y-6 max-w-5xl mx-auto">
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900">Analyze Text</h1>
+        <p className="text-gray-500 mt-1">Enter text to analyze sentiment, including emojis</p>
+      </div>
+
+      <Card className="bg-white shadow-md">
+        <CardHeader>
+          <CardTitle>Text Input</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Enter your text
+            </label>
+            <Textarea
+              placeholder="Type or paste your text here... Emojis are supported! 😊😐😢"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              className="min-h-32"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Select Model
+            </label>
+            <Select value={model} onValueChange={setModel}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Hugging Face BERT">Hugging Face BERT</SelectItem>
+                <SelectItem value="VaderSentiment">VaderSentiment</SelectItem>
+                <SelectItem value="AWS Comprehend">AWS Comprehend</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <Button
+            onClick={handleAnalyze}
+            disabled={!text.trim() || analyzeMutation.isPending}
+            className="w-full bg-[#00897B] hover:bg-[#00695C]"
+            size="lg"
+          >
+            {analyzeMutation.isPending ? (
+              <>
+                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                Analyzing...
+              </>
+            ) : (
+              <>
+                <Send className="w-5 h-5 mr-2" />
+                Analyze Sentiment
+              </>
+            )}
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Feedback Card */}
+      <AnimatePresence>
+        {result && (
+          <FeedbackCard result={result} type="text" />
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
