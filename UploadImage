@@ -1,0 +1,201 @@
+import React, { useState } from "react";
+import { base44 } from "@/api/base44Client";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Loader2, Upload, Image as ImageIcon } from "lucide-react";
+import FeedbackCard from "../components/dashboard/FeedbackCard";
+import { AnimatePresence } from "framer-motion";
+
+export default function UploadImage() {
+  const [file, setFile] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [model, setModel] = useState("Hugging Face BERT");
+  const [enableOCR, setEnableOCR] = useState(true);
+  const [result, setResult] = useState(null);
+  const queryClient = useQueryClient();
+
+  const uploadMutation = useMutation({
+    mutationFn: async ({ file, model, enableOCR }) => {
+      // Upload image
+      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+
+      let extractedText = "";
+      let sentiment = "Neutral";
+      let score = 0.5;
+
+      if (enableOCR) {
+        // Try to extract text using OCR
+        const ocrPrompt = `Extract all text from this image, including any emojis. Return JSON with "text" field containing the extracted text, or empty string if no text found.`;
+        
+        const ocrResult = await base44.integrations.Core.InvokeLLM({
+          prompt: ocrPrompt,
+          file_urls: [file_url],
+          response_json_schema: {
+            type: "object",
+            properties: {
+              text: { type: "string" }
+            }
+          }
+        });
+
+        extractedText = ocrResult.text || "";
+
+        if (extractedText.trim()) {
+          // Analyze sentiment of extracted text
+          const sentimentResult = await base44.integrations.Core.InvokeLLM({
+            prompt: `Analyze sentiment: "${extractedText}". Return JSON with "sentiment" (Positive/Neutral/Negative) and "score" (0-1).`,
+            response_json_schema: {
+              type: "object",
+              properties: {
+                sentiment: { type: "string" },
+                score: { type: "number" }
+              }
+            }
+          });
+          sentiment = sentimentResult.sentiment;
+          score = sentimentResult.score;
+        }
+      }
+
+      // Store in database
+      const record = await base44.entities.SentimentData.create({
+        text: extractedText || "Image uploaded (no text detected)",
+        model,
+        sentiment,
+        score,
+        image_url: file_url
+      });
+
+      return {
+        text: extractedText || "Image uploaded (no text detected)",
+        sentiment,
+        score,
+        model,
+        image_url: file_url
+      };
+    },
+    onSuccess: (data) => {
+      setResult(data);
+      queryClient.invalidateQueries({ queryKey: ["sentimentData"] });
+    }
+  });
+
+  const handleFileChange = (e) => {
+    const selectedFile = e.target.files[0];
+    if (selectedFile && selectedFile.type.startsWith('image/')) {
+      setFile(selectedFile);
+      setResult(null);
+      
+      // Create preview
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPreview(reader.result);
+      };
+      reader.readAsDataURL(selectedFile);
+    }
+  };
+
+  const handleUpload = () => {
+    if (!file) return;
+    uploadMutation.mutate({ file, model, enableOCR });
+  };
+
+  return (
+    <div className="p-6 lg:p-8 space-y-6 max-w-5xl mx-auto">
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900">Upload Image</h1>
+        <p className="text-gray-500 mt-1">Upload an image with optional OCR text extraction</p>
+      </div>
+
+      <Card className="bg-white shadow-md">
+        <CardHeader>
+          <CardTitle>Image Upload</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Select Image File
+            </label>
+            <Input
+              type="file"
+              accept=".jpg,.jpeg,.png"
+              onChange={handleFileChange}
+              className="cursor-pointer"
+            />
+          </div>
+
+          {preview && (
+            <div className="mt-4">
+              <p className="text-sm font-medium text-gray-700 mb-2">Preview:</p>
+              <img 
+                src={preview} 
+                alt="Preview" 
+                className="w-full max-h-64 object-contain rounded-lg border"
+              />
+            </div>
+          )}
+
+          <div className="flex items-center space-x-2">
+            <Checkbox 
+              id="ocr" 
+              checked={enableOCR}
+              onCheckedChange={setEnableOCR}
+            />
+            <label
+              htmlFor="ocr"
+              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+            >
+              Enable OCR (Extract text from image)
+            </label>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Select Model
+            </label>
+            <Select value={model} onValueChange={setModel}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Hugging Face BERT">Hugging Face BERT</SelectItem>
+                <SelectItem value="VaderSentiment">VaderSentiment</SelectItem>
+                <SelectItem value="AWS Comprehend">AWS Comprehend</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <Button
+            onClick={handleUpload}
+            disabled={!file || uploadMutation.isPending}
+            className="w-full bg-[#00897B] hover:bg-[#00695C]"
+            size="lg"
+          >
+            {uploadMutation.isPending ? (
+              <>
+                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                Processing Image...
+              </>
+            ) : (
+              <>
+                <Upload className="w-5 h-5 mr-2" />
+                Upload and Analyze
+              </>
+            )}
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Feedback */}
+      <AnimatePresence>
+        {result && (
+          <FeedbackCard result={result} type="image" />
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
