@@ -1,80 +1,134 @@
-/* =====================================================
-   Sentiment AI Dashboard Script
-   Author: Malehu Johanna Segoapa
-   ===================================================== */
+import React from "react";
+import { base44 } from "@/api/base44Client";
+import { useQuery } from "@tanstack/react-query";
+import { FileText, Smile, Meh, Frown } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import MetricCard from "../components/dashboard/MetricCard";
+import SentimentPieChart from "../components/dashboard/SentimentPieChart";
+import SentimentBarChart from "../components/dashboard/SentimentBarChart";
+import SentimentTimelineChart from "../components/dashboard/SentimentTimelineChart";
 
-const inputField = document.getElementById("userInput");
-const analyzeBtn = document.getElementById("analyzeBtn");
-const clearBtn = document.getElementById("clearBtn");
-const resultBox = document.getElementById("resultBox");
-const chartCanvas = document.getElementById("sentimentChart");
-
-const positiveCount = document.getElementById("positiveCount");
-const neutralCount = document.getElementById("neutralCount");
-const negativeCount = document.getElementById("negativeCount");
-
-let sentimentData = { Positive: 0, Neutral: 0, Negative: 0 };
-
-const positiveWords = ["happy", "love", "great", "good", "excellent", "joy", "😊", "😁", "👍", "wonderful"];
-const negativeWords = ["sad", "bad", "hate", "angry", "terrible", "awful", "😢", "😡", "👎", "depressing"];
-
-function analyzeSentiment(text) {
-  const lower = text.toLowerCase();
-  let score = 0;
-
-  positiveWords.forEach(word => { if (lower.includes(word)) score++; });
-  negativeWords.forEach(word => { if (lower.includes(word)) score--; });
-
-  if (score > 0) return "Positive";
-  if (score < 0) return "Negative";
-  return "Neutral";
-}
-
-function updateCounts() {
-  positiveCount.textContent = sentimentData.Positive;
-  neutralCount.textContent = sentimentData.Neutral;
-  negativeCount.textContent = sentimentData.Negative;
-}
-
-function updateChart() {
-  const ctx = chartCanvas.getContext("2d");
-  if (window.sentimentChart) window.sentimentChart.destroy();
-
-  window.sentimentChart = new Chart(ctx, {
-    type: "pie",
-    data: {
-      labels: Object.keys(sentimentData),
-      datasets: [{
-        data: Object.values(sentimentData),
-        backgroundColor: ["#4CAF50", "#FFC107", "#F44336"],
-      }]
-    },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: { position: "bottom" }
-      }
-    }
+export default function Dashboard() {
+  const { data: records = [], isLoading } = useQuery({
+    queryKey: ["sentimentData"],
+    queryFn: () => base44.entities.SentimentData.list("-created_date"),
+    initialData: []
   });
+
+  const stats = {
+    total: records.length,
+    positive: records.filter(r => r.sentiment === "Positive").length,
+    neutral: records.filter(r => r.sentiment === "Neutral").length,
+    negative: records.filter(r => r.sentiment === "Negative").length
+  };
+
+  const positivePercentage = stats.total > 0 ? ((stats.positive / stats.total) * 100).toFixed(1) : 0;
+  const neutralPercentage = stats.total > 0 ? ((stats.neutral / stats.total) * 100).toFixed(1) : 0;
+  const negativePercentage = stats.total > 0 ? ((stats.negative / stats.total) * 100).toFixed(1) : 0;
+
+  return (
+    <div className="p-6 lg:p-8 space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900">Dashboard Overview</h1>
+        <p className="text-gray-500 mt-1">Track sentiment analysis metrics and insights</p>
+      </div>
+
+      {/* Metric Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <MetricCard
+          title="Total Texts Analyzed"
+          value={stats.total}
+          icon={FileText}
+          bgColor="#00897B"
+          textColor="#00897B"
+        />
+        <MetricCard
+          title="Positive Sentiments"
+          value={stats.positive}
+          icon={Smile}
+          bgColor="#00C853"
+          textColor="#00C853"
+          percentage={positivePercentage}
+        />
+        <MetricCard
+          title="Neutral Sentiments"
+          value={stats.neutral}
+          icon={Meh}
+          bgColor="#FFD600"
+          textColor="#F57C00"
+          percentage={neutralPercentage}
+        />
+        <MetricCard
+          title="Negative Sentiments"
+          value={stats.negative}
+          icon={Frown}
+          bgColor="#D50000"
+          textColor="#D50000"
+          percentage={negativePercentage}
+        />
+      </div>
+
+      {/* Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card className="bg-white shadow-md">
+          <CardHeader>
+            <CardTitle>Sentiment Distribution</CardTitle>
+          </CardHeader>
+          <CardContent className="h-80">
+            <SentimentPieChart data={stats} />
+          </CardContent>
+        </Card>
+
+        <Card className="bg-white shadow-md">
+          <CardHeader>
+            <CardTitle>Sentiment Counts</CardTitle>
+          </CardHeader>
+          <CardContent className="h-80">
+            <SentimentBarChart data={stats} />
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Timeline */}
+      <Card className="bg-white shadow-md">
+        <CardHeader>
+          <CardTitle>Sentiment Timeline</CardTitle>
+        </CardHeader>
+        <CardContent className="h-80">
+          <SentimentTimelineChart records={records} />
+        </CardContent>
+      </Card>
+
+      {/* Quick Stats */}
+      <Card className="bg-white shadow-md">
+        <CardHeader>
+          <CardTitle>Quick Statistics</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <p className="text-sm text-gray-500">Most Common Sentiment</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">
+                {stats.positive >= stats.neutral && stats.positive >= stats.negative ? "Positive 😊" :
+                 stats.negative >= stats.neutral ? "Negative 😠" : "Neutral 😐"}
+              </p>
+            </div>
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <p className="text-sm text-gray-500">Average Confidence</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">
+                {records.length > 0 ? 
+                  ((records.reduce((sum, r) => sum + r.score, 0) / records.length) * 100).toFixed(1) : 0}%
+              </p>
+            </div>
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <p className="text-sm text-gray-500">Latest Analysis</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">
+                {records.length > 0 ? new Date(records[0].created_date).toLocaleDateString() : "N/A"}
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
-
-analyzeBtn.addEventListener("click", () => {
-  const text = inputField.value.trim();
-  if (!text) return alert("Please enter text to analyze.");
-
-  const sentiment = analyzeSentiment(text);
-  sentimentData[sentiment]++;
-  resultBox.innerHTML = `Detected Sentiment: <strong>${sentiment}</strong>`;
-  updateCounts();
-  updateChart();
-});
-
-clearBtn.addEventListener("click", () => {
-  inputField.value = "";
-  resultBox.innerHTML = "";
-  sentimentData = { Positive: 0, Neutral: 0, Negative: 0 };
-  updateCounts();
-  updateChart();
-});
-
-updateChart();
